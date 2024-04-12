@@ -33,6 +33,8 @@ class CognitoExporter(object):
         for header in self.csv_headers:
             self.write_dict[header] = []
 
+        self.len_headers = len(self.write_dict)
+
         return
 
     def get_csv_headers(self) -> list:
@@ -54,22 +56,33 @@ class CognitoExporter(object):
             user (dict): Json for individual user
         """
 
-        print(user)
+        blank_record = dict.fromkeys(self.csv_headers, "")
 
-        # for key in self.write_dict.keys():
-        #     jsonlike_key = key.replace("_", " ").title().replace(" ", "")
+        ### PLAN
+        ##  MAKE BLANK DICT RECORD
+        ##  GO THROUGH KEYS
+        ##  MAKE JSONLIKE STRING FOR EACH KEY
+        ##  CHECK JSONLIKE STRING AGAIN EACH KEY IN USER
 
-        #     if jsonlike_key not in user.keys():
-        #         if key in [
-        #             attribute_dict["Name"] for attribute_dict in user["Attributes"]
-        #         ]:
-        #             self.write_dict[key].append(
-        #                 attribute_dict["Value"]
-        #                 for attribute_dict in user["Attributes"]
-        #                 if attribute_dict["Name"] == key
-        #             )
-        #     else:
-        #         self.write_dict[key] = user[jsonlike_key]
+        user["Attributes"] = {
+            attribute["Name"]: attribute["Value"] for attribute in user["Attributes"]
+        }
+
+        for key in blank_record.keys():
+
+            if ":" in key:
+                jsonlike_key = (
+                    key.split(":")[1].replace("_", " ").title().replace(" ", "")
+                )
+            else:
+                jsonlike_key = key.replace("_", " ").title().replace(" ", "")
+
+            if jsonlike_key in user.keys():
+                blank_record[key] = user[jsonlike_key]
+            elif key in user["Attributes"].keys():
+                blank_record[key] = user["Attributes"][key]
+
+        [self.write_dict[key].append(blank_record[key]) for key in self.write_dict]
 
         return
 
