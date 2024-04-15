@@ -7,6 +7,8 @@ import pandas as ps
 import json
 import csv
 
+import re
+
 
 class CognitoExporter(object):
     """Cognito client, user info un-roller and exporter"""
@@ -56,6 +58,8 @@ class CognitoExporter(object):
             user (dict): Json for individual user
         """
 
+        PREFIXES = ["", "cognito:", "cognito:mfa_", "custom:"]
+
         blank_record = dict.fromkeys(self.csv_headers, "")
 
         ### PLAN
@@ -64,23 +68,39 @@ class CognitoExporter(object):
         ##  MAKE JSONLIKE STRING FOR EACH KEY
         ##  CHECK JSONLIKE STRING AGAIN EACH KEY IN USER
 
+        ###Converts key-value structure from Name:'key name', Value:'value name' to more traditional one
         user["Attributes"] = {
             attribute["Name"]: attribute["Value"] for attribute in user["Attributes"]
         }
 
-        for key in blank_record.keys():
+        for user_key in user.keys():
+            if user_key == "Attributes":
+                attributes = user[user_key]
 
-            if ":" in key:
-                jsonlike_key = (
-                    key.split(":")[1].replace("_", " ").title().replace(" ", "")
-                )
+                for attribute_key in attributes.keys():
+                    if attribute_key in blank_record.keys():
+                        blank_record[attribute_key] = attributes[attribute_key]
+
             else:
-                jsonlike_key = key.replace("_", " ").title().replace(" ", "")
+                json_key_upper_words = re.findall("[A-Z][^A-Z]*", user_key)
 
-            if jsonlike_key in user.keys():
-                blank_record[key] = user[jsonlike_key]
-            elif key in user["Attributes"].keys():
-                blank_record[key] = user["Attributes"][key]
+                ##Makes key look like cvs headers
+                json_key_converted = "_".join(json_key_upper_words).lower()
+
+                for PREFIX in PREFIXES:
+                    if PREFIX + json_key_converted in blank_record.keys():
+                        blank_record[PREFIX + json_key_converted] = user[user_key]
+
+        # for key in blank_record.keys():
+        #     if ":" in key:
+        #         split_key = key.split(":")[1]
+
+        #     jsonlike_key = key.replace("_", " ").title().replace(" ", "")
+
+        #     if jsonlike_key in user.keys():
+        #         blank_record[key] = user[jsonlike_key]
+        #     elif key in user["Attributes"].keys():
+        #         blank_record[key] = user["Attributes"][key]
 
         [self.write_dict[key].append(blank_record[key]) for key in self.write_dict]
 
@@ -91,16 +111,29 @@ class CognitoExporter(object):
 
         pagination_token = ""
 
-        while pagination_token != None:
+        user_response = self.client.list_users(UserPoolId=self.user_pool_id)
 
-            user_response = self.client.list_users(UserPoolId=self.user_pool_id)
+        users = user_response["Users"]
+
+        for user in users:
+            self.unwrap_and_store_user(user)
+
+        if "PaginationToken" in user_response.keys():
+            pagination_token = user_response["PaginationToken"]
+        else:
+            pagination_token = None
+
+        while pagination_token != None:
+            user_response = self.client.list_users(
+                UserPoolId=self.user_pool_id, PaginationToken=pagination_token
+            )
 
             users = user_response["Users"]
 
             for user in users:
                 self.unwrap_and_store_user(user)
 
-            if pagination_token in user_response.keys():
+            if "PaginationToken" in user_response.keys():
                 pagination_token = user_response["PaginationToken"]
             else:
                 pagination_token = None
