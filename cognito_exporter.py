@@ -9,20 +9,44 @@ import csv
 
 import re
 
+import os
+
 
 class CognitoExporter(object):
     """Cognito client, user info un-roller and exporter"""
 
-    def __init__(self, user_pool_id: str, region: str, output_path: str) -> None:
-        cognito_config = Config(
-            region_name=region, retries={"max_attempts": 10, "mode": "adaptive"}
-        )
-
-        self.client = boto3.client("cognito-idp", config=cognito_config)
+    def __init__(
+        self,
+        aws_access_key_id,
+        aws_secret_access_key,
+        aws_session_token,
+        user_pool_id: str,
+        region: str,
+        output_dir: str,
+    ) -> None:
 
         self.user_pool_id = user_pool_id
         self.region = region
-        self.output_path = output_path
+        self.output_dir = output_dir
+
+        self.create_dir_if_none(output_dir)
+
+        cognito_config = Config(
+            region_name=region,
+            retries={"max_attempts": 10, "mode": "adaptive"},
+        )
+
+        self.client = boto3.client(
+            "cognito-idp",
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_session_token=aws_session_token,
+            config=cognito_config,
+        )
+
+        self.full_output_path = os.path.abspath(
+            self.output_dir + "/" + self.get_user_pool_name() + ".csv"
+        )
 
         self.write_dict = {}
 
@@ -38,6 +62,19 @@ class CognitoExporter(object):
         self.len_headers = len(self.write_dict)
 
         return
+
+    def create_dir_if_none(self, dir: str) -> None:
+        absolute_path = os.path.abspath(dir)
+
+        if not os.path.exists(absolute_path):
+            os.makedirs(absolute_path)
+
+        return
+
+    def get_user_pool_name(self) -> str:
+        response = self.client.describe_user_pool(UserPoolId=self.user_pool_id)
+
+        return response["UserPool"]["Name"]
 
     def get_csv_headers(self) -> list:
         """Returns list of csv headers for user pool
@@ -145,7 +182,7 @@ class CognitoExporter(object):
 
         df = ps.DataFrame.from_dict(self.write_dict)
 
-        df.to_csv(self.output_path, index=False)
+        df.to_csv(self.full_output_path, index=False)
 
 
 def get_access_keys_from_csv(keys_csv_path: str) -> tuple[str, str, str]:
@@ -204,9 +241,9 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-o",
-        "--output-path",
-        dest="output_path",
-        help="output csv path (must end in .csv)",
+        "--output-dir",
+        dest="output_dir",
+        help="output directory path",
         required=True,
         type=str,
     )
@@ -215,11 +252,24 @@ if __name__ == "__main__":
 
     keys_csv_path = args.access_keys_csv_path
 
+    user_pool_id = args.user_pool_id
+
+    region = args.region
+
+    output_dir = args.output_dir
+
     aws_access_key_id, aws_secret_access_key, aws_session_token = (
         get_access_keys_from_csv(keys_csv_path)
     )
 
-    exporter = CognitoExporter(args.user_pool_id, args.region, args.output_path)
+    exporter = CognitoExporter(
+        aws_access_key_id,
+        aws_secret_access_key,
+        aws_session_token,
+        user_pool_id,
+        region,
+        output_dir,
+    )
 
     exporter.populate_dict()
 
