@@ -18,7 +18,7 @@ class CognitoExporter(object):
             region_name=region, retries={"max_attempts": 10, "mode": "adaptive"}
         )
 
-        self.client = boto3.client("cognito-idp")
+        self.client = boto3.client("cognito-idp", config=cognito_config)
 
         self.user_pool_id = user_pool_id
         self.region = region
